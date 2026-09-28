@@ -1,0 +1,14 @@
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store
+.venv/
+
+figures/
+calibration/figures/
+calibration/outputs/*
+!calibration/outputs/.gitkeep
+data/BDBV2026-Data
+data/flowminder_hdx
+scenarios/figures/
+scenarios/outputs/*
+!scenarios/outputs/.gitkeep

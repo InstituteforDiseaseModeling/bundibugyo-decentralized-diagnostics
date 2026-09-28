@@ -1,0 +1,257 @@
+# Confirmatory-testing (PCR) rollout timeline — 2026 DRC BDBV outbreak.
+#
+# This is the time-varying, spatially-structured CONFIRMATION-CAPACITY map that
+# shaped the observed confirmed-case data (visible as step jumps when labs came
+# online) and is the BASELINE that the proposed diagnostic intervention scales up.
+#
+# Source: INSP / CUOSP French SitReps N°017–030, extracted by D. Klein 2026-06-15.
+# Caveats: pre-Bunia turnaround is qualitative (no published number); the
+# Miti-Murhesa and Beni dates are approximate (installation spanned several days).
+
+baseline:
+  description: >
+    Before 2026-05-28, all field samples shipped ~1,500 km to INRB Kinshasa (the
+    national reference lab), which did the initial confirmation / outbreak
+    declaration on 2026-05-15. SitReps repeatedly cite "difficulté d'acheminement
+    des échantillons"; reagents/kits were also dispatched from Kinshasa. No single
+    turnaround number is published — transport-limited, multi-day to >1 week. This
+    produced the 24–27 May undercount (the "diagnostic bottleneck" band).
+  reference_lab: "Kinshasa (INRB)"
+  turnaround_days: null            # qualitative; model as a wide prior, e.g. 7–14 d
+  turnaround_note: "multi-day to >1 week; transport-limited"
+
+# Index cluster (reconciled with early_labs.txt, cross-session 2026-06-17): the first detected
+# cases were a ~20-sample cluster from RWAMPARA; 13 tested by 14 May, sequenced as Bundibugyo,
+# outbreak declared 15 May. => Rwampara is the INDEX zone and part of the "Bunia/Rwampara urban
+# core" — which is why it is heavily confirmed (192) despite having no machine of its own
+# (intense initial investigation + provincial-hub catchment), NOT a model misfit.
+index_cluster:
+  zone_nom: "Rwampara"
+  n_samples: 20
+  n_tested_by_14may: 13
+  declared: "2026-05-15"
+
+turnaround_target_days: 2          # "Laboratoire J+2" target; met at Bunia/Mongbwalu post-rollout
+
+# zone_nom uses the canonical shapefile name (Mongbwalu -> Mongbalu via aliases.csv).
+labs:
+  - location: "Kinshasa (INRB)"
+    zone_nom: "Kinshasa"
+    province: "Kinshasa"
+    role: "national reference / genomic backstop / reagent source"
+    online_date: "2026-05-15"
+    turnaround_days: null
+    note: "from day one; still the genomic/confirmatory backstop and reagent source"
+
+  - location: "Bunia"
+    zone_nom: "Bunia"
+    province: "Ituri"
+    role: "provincial lab — broke the bottleneck"
+    platform: "GeneXpert / RADIONE 4-module (+2,000 cartridges)"
+    received_date: "2026-05-27"     # N°013
+    online_date: "2026-05-28"       # local PCR running ~28 May
+    step_jump_confirmed: 84         # the +84 on 28 May is BACKLOG CATCH-UP, not a true one-day surge
+    backlog_before: 203             # ~203 samples unanalysed by ~25 May (N°011), pre-Bunia
+    backlog_residual: 47            # still 47 queued 1 Jun (N°017): cleared over DAYS, not a single dump
+    turnaround_days: 2
+
+  - location: "Miti-Murhesa"
+    zone_nom: "Miti-Murhesa"
+    province: "Sud-Kivu"
+    role: "first local Sud-Kivu confirmatory capacity (mobile INRB lab)"
+    online_date: "2026-06-01"      # ~1–2 Jun, approximate
+    online_date_approx: true
+    turnaround_days: 2
+
+  - location: "Mongbwalu"
+    zone_nom: "Mongbalu"
+    province: "Ituri"
+    role: "epicentre health zone — decentralized"
+    platform: "RADIONE + glove box"
+    deployed_date: "2026-06-03"
+    online_date: "2026-06-04"
+    step_jump_confirmed: 71
+    turnaround_days: 2
+
+  - location: "Beni (INRB/Beni)"
+    zone_nom: "Beni"
+    province: "Nord-Kivu"
+    role: "reinforcement (lab materials) — NOT a new PCR go-live"
+    materials_delivered: "2026-06-07"
+    online_date_approx: true
+    turnaround_days: null
+
+  # --- second-wave labs (from MVE17_diagnostics_timetable_vJul102026.xlsx) ---
+
+  - location: "Komanda"
+    zone_nom: "Komanda"
+    province: "Ituri"
+    role: "decentralized PCR (second wave of Ituri decentralization)"
+    online_date: "2026-07-02"
+    online_date_approx: true
+    turnaround_days: 2
+
+  - location: "Nizi"
+    zone_nom: "Nizi"
+    province: "Ituri"
+    role: "decentralized PCR"
+    online_date: "2026-07-02"
+    online_date_approx: true
+    turnaround_days: 2
+
+  - location: "Mambasa"
+    zone_nom: "Mambasa"
+    province: "Ituri"
+    role: "decentralized PCR"
+    online_date: "2026-07-02"
+    online_date_approx: true
+    turnaround_days: 2
+
+  - location: "Nia-Nia"
+    zone_nom: "Nia-Nia"
+    province: "Ituri"
+    role: "decentralized PCR (batch catch-up drives ~+13 confirms on 07-06)"
+    online_date: "2026-07-02"
+    online_date_approx: true
+    turnaround_days: 2
+
+  - location: "Kisangani (Tshopo)"
+    zone_nom: "Makiso-Kisangani"
+    province: "Tshopo"
+    role: "RADIONE + Altona RT-PCR validation; first Tshopo cases confirmed here"
+    online_date: "2026-07-07"
+    online_date_approx: true
+    turnaround_days: 2
+
+# Regions that did NOT get local rapid PCR during the observed window.
+never_local_pcr:
+  - region: "Nord-Kivu (Grand/Petit Nord)"
+    arrangement: "ship to Kinshasa"
+    turnaround_days: ">5"
+    issues: "reagent stockouts; backlogs of 159–193 pending results"
+    implication: >
+      North Kivu (the secondary focus: Katwa/Butembo/Beni) had no local rapid PCR,
+      so its low confirmed counts are partly an ascertainment artifact — true burden
+      there may exceed what confirmed cases show.
+
+stability_note: >
+  SitReps N°025–030 add no new labs; the network (Kinshasa + Bunia + Mongbwalu +
+  Miti-Murhesa + Beni) is stable and reports now track "Laboratoire J+2"
+  performance. The epidemic is still growing through 13 Jun (N°030: 72 new
+  confirmed incl. 29 deaths that day; Re ≈ 1.9, still rising).
+
+# How this becomes the observation layer:
+catchment_method: >
+  Assign each health zone to the nearest ONLINE lab by OSRM road travel time
+  (BDBV2026-Data/data/osrm/processed/osrm__travel_time__static.matrix.csv). A
+  zone's confirmation turnaround at time t = J+2 if within reach of an online
+  local lab, else the ship-to-Kinshasa baseline (>5 days, transport-limited).
+  The diagnostic intervention adds labs -> more zones reach J+2, earlier.
+
+# Daily samples ANALYSED (Ituri/Bunia hub — the only province with a daily series; early_labs.txt).
+# This is the capacity-throughput signal for a capacity/backlog-aware confirmation model. Caveats:
+# (1) ~= Bunia-hub throughput (dominated by the Bunia/Rwampara urban core + zones that could ship in),
+# NOT a province-wide testing rate; (2) ~1-day report-vs-sample lag; (3) positivity swings
+# (22%->49%) reflect the changing sample MIX (backlog clearance vs targeted post-mortem swabs),
+# not assay behaviour. Other provinces ran a trickle (Nord-Kivu ~10-57/day, Sud-Kivu ~2-6/day).
+daily_samples_analysed_ituri:
+  - {date: "2026-05-31", analysed: 52,  positive_pct: 36.5, sitrep: "N016"}
+  - {date: "2026-06-01", analysed: 47,  positive_n: 12, note: "47-sample backlog flagged", sitrep: "N017"}
+  - {date: "2026-06-02", analysed: 82,  positive_pct: 22,  range: "70-82", sitrep: "N019-020"}
+  - {date: "2026-06-04", analysed: 199, positive_pct: 32.6, note: "Mongbwalu online (+71)", sitrep: "N021"}
+  - {date: "2026-06-06", analysed: 109, positive_pct: 33,  sitrep: "N022"}
+  - {date: "2026-06-07", analysed: 63,  positive_pct: 49.2, range: "94->63", sitrep: "N023-024"}
+
+# Modeling note (the "smarter than a single dump" capacity model):
+# Confirmation must RAMP through the early phase, NOT hold all cryptic samples and dump them at the
+# first lab. Three coupled time-varying processes:
+#   (1) PCR throughput ramps: ~0 -> Kinshasa-only (slow, transport-limited, ~203 backlog by 25 May)
+#       -> Bunia ~28 May (+84 catch-up, 47 residual) -> Mongbwalu 4 Jun (+71 / 199-sample day) ...
+#       each capacity go-live is a STEP CHANGE that clears part of the standing backlog.
+#   (2) Backlog is capacity-limited: pending samples accumulate when demand > throughput and clear
+#       in catch-up bursts as capacity comes online (this is what makes the +84/+71 step-jumps).
+#   (3) Knowledge/awareness of BDBV ramps outward from the index (Rwampara/Bunia, mid-May) — a zone's
+#       suspicion (-> sampling) rises after BDBV is recognised there, not instantaneously nationwide.
+
+  # --- Jul 14–20 additions (from SitReps N°61–67) ---
+
+  - location: "Logo"
+    zone_nom: "Logo"
+    province: "Ituri"
+    role: "decentralized PCR (third wave of Ituri decentralization)"
+    materials_received_date: "2026-07-17"    # N°64: "matériels réceptionnés à l'HGR de Logo"
+    online_date: "2026-07-20"               # N°67: "Installation d'un laboratoire de diagnostic dans la ZS de Logo" confirmed
+    online_date_approx: false
+    turnaround_days: 2
+    note: >
+      Preparation running in parallel at Mambasa (N°62: "installation de laboratoires à Mambasa
+      et Logo planifiée"; N°64: "préparation des capacités diagnostiques de proximité à Mambasa
+      et Logo"). Mambasa online_date in earlier entry (2026-07-02) appears to have been the
+      equipment-delivery date for the first four Ituri decentralised labs; full diagnostic
+      capacity at Mambasa was still being prepared through 17 Jul (N°64).
+
+  - location: "Mahagi"
+    zone_nom: "Mahagi"
+    province: "Ituri"
+    role: "decentralized PCR — MVE-B protocol lab"
+    materials_deployed_date: "2026-07-18"   # N°65: "Déploiement des intrants de laboratoire, équipements et Kits de diagnostic dans la ZS de Mahagi"
+    online_date: "2026-07-18"
+    online_date_approx: true
+    turnaround_days: 2
+    note: >
+      Explicitly labelled "laboratoire MVE-B" in N°65 — likely a Bundibugyo-specific protocol
+      designation rather than a different platform. Mahagi is also a named affected health zone
+      (appears in the ZS list from N°65 onward). Equipment and diagnostic kits confirmed
+      deployed 18 Jul; installation in progress.
+
+  - location: "Kasenyi (border mobile lab)"
+    zone_nom: "Kasenyi"
+    province: "Ituri"
+    role: "mobile PCR — cross-border surveillance point (DRC/Uganda joint)"
+    online_date: null
+    online_date_approx: true
+    turnaround_days: null
+    note: >
+      Joint DRC–Uganda technical evaluation of a Ugandan-deployed mobile lab at the Kasenyi
+      border crossing (Lake Albert, Ituri/Uganda) on 19 Jul (N°66). Not yet confirmed
+      operational. Surveillance/early-warning role at a named transmission-driver crossing —
+      SitReps cite cross-border movement with Uganda and South Sudan as complicating the
+      response. Does NOT serve treatment zones directly; treat as a surveillance node, not a
+      confirmation-catchment lab for the observation model.
+
+# Mambasa correction note (update from prior entry):
+# The Mambasa online_date of 2026-07-02 in the second-wave block was the installation
+# announcement date (N°49/SR49 note). N°62 (15 Jul) lists it as "planifiée" and
+# N°64 (17 Jul) describes "préparation en cours" — full diagnostic capacity was
+# still being stood up through at least 17 Jul. Treat the 07-02 date as
+# partial/approx and the Logo/Mambasa parallel build as a single decentralization
+# wave completing ~20 Jul.
+
+# Updated daily_samples_analysed — N°61–67 (new-format PDFs; reported as
+# "échantillons documentés dans le réseau de collecte" for Ituri from N°64 onward,
+# meaning the collection-network total rather than Bunia-hub only — broader denominator
+# than earlier entries, so positivity figures are not directly comparable to pre-N°64 series).
+# Haut-Uélé and Tshopo now appear as separate lines but volumes are small and pending.
+
+daily_samples_analysed_N61_N67:
+  - {sitrep: "N061", date: "2026-07-14", province: "Ituri",    analysed: 152, positive_n: 55,  positive_pct: 36.2, note: "106 blood + 46 swab; analytical sitrep"}
+  - {sitrep: "N061", date: "2026-07-14", province: "Nord-Kivu", analysed: 110, positive_n: 7,   positive_pct: 6.4,  note: "ND breakdown"}
+  - {sitrep: "N061", date: "2026-07-14", province: "Sud-Kivu",  analysed: null, note: "4 collected, en cours"}
+  - {sitrep: "N061", date: "2026-07-14", province: "Haut-Uélé", analysed: null, note: "9 collected, en cours"}
+  - {sitrep: "N061", date: "2026-07-14", province: "Tshopo",    analysed: null, note: "1 collected, en cours"}
+  - {sitrep: "N062", date: "2026-07-15", province: "Ituri",    analysed: 186, positive_n: 41,  positive_pct: 22.0, note: "148 blood + 38 swab"}
+  - {sitrep: "N062", date: "2026-07-15", province: "Nord-Kivu", analysed: 129, positive_n: 10,  positive_pct: 7.8,  note: "Beni 52 + Butembo 77; 30 in progress"}
+  - {sitrep: "N062", date: "2026-07-15", province: "Sud-Kivu",  analysed: null, note: "3 collected, awaiting results; cumul 238 analysed, 3 pos (1.3%)"}
+  - {sitrep: "N064", date: "2026-07-17", province: "Ituri",    analysed: 211, positive_n: 75,  positive_pct: 35.5, note: "61 vivants + 14 décès; 'réseau de collecte' denominator — broader than Bunia-hub"}
+  - {sitrep: "N064", date: "2026-07-17", province: "Nord-Kivu", analysed: 119, positive_n: 8,   positive_pct: 6.7}
+  - {sitrep: "N064", date: "2026-07-17", province: "Haut-Uélé", analysed: null, note: "4 collected pending; 4 new positive results from Nia-Nia lab"}
+  - {sitrep: "N065", date: "2026-07-18", province: "Ituri",    analysed: 167, positive_n: 67,  positive_pct: 38.1, note: "45 vivants + 22 décès"}
+  - {sitrep: "N065", date: "2026-07-18", province: "Nord-Kivu", analysed: 127, positive_n: 16,  positive_pct: 12.6}
+  - {sitrep: "N065", date: "2026-07-18", province: "Haut-Uélé", analysed: null, note: "53 collected, en cours"}
+  - {sitrep: "N065", date: "2026-07-18", province: "Tshopo",    analysed: null, note: "6 collected, en cours"}
+  - {sitrep: "N066", date: "2026-07-19", province: "Ituri",    analysed: 167, positive_n: 70,  positive_pct: 41.9, note: "47 vivants + 23 décès"}
+  - {sitrep: "N066", date: "2026-07-19", province: "Nord-Kivu", analysed: 105, positive_n: 9,   positive_pct: 8.6,  note: "8 vivants + 1 décès"}
+  - {sitrep: "N066", date: "2026-07-19", province: "Haut-Uélé", analysed: null, note: "4 collected, en cours"}
+  - {sitrep: "N067", date: "2026-07-20", province: "Ituri",    analysed: 113, positive_n: 42,  positive_pct: 37.2, note: "29 vivants + 13 décès"}
+  - {sitrep: "N067", date: "2026-07-20", province: "Nord-Kivu", analysed: 126, positive_n: 8,   positive_pct: 6.3,  note: "5 vivants + 3 décès"}
+

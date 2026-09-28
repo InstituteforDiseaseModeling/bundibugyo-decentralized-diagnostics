@@ -1,0 +1,37 @@
+[project]
+name = "bundibugyo-decentralized-diagnostics"
+version = "1.0"
+description = "Decentralized diagnostics as a spatial control strategy for the 2026 Bundibugyo Ebola epidemic"
+requires-python = ">=3.12"
+dependencies = [
+  "emcee>=3.1",
+  "geopandas>=1.0",
+  "h5py>=3.11",
+  "matplotlib>=3.8",
+  "numpy>=2.0",
+  "openpyxl>=3.1",
+  "pandas>=2.2",
+  "pyyaml>=6.0",
+  "scipy>=1.12",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 99
+target-version = "py312"
+
+[dependency-groups]
+dev = [
+    "pandas-stubs>=3.0",
+]
+
+[tool.pyright]
+include = ["bdbv", "calibration", "scenarios", "scripts", "tests"]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+# tests/ imports scripts/stage_data.py after putting scripts/ on sys.path
+extraPaths = ["scripts"]

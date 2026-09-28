@@ -1,0 +1,22 @@
+# CTE zones — full treatment centres that ATTRACT patients via referral.
+# Derived from data/MVE17_diagnostics_timetable_vJul102026.xlsx, Care_facilities sheet.
+#
+# Referring zones (all zones NOT in this list) get their care_destination set to the
+# nearest CTE zone by travel-time via the OSRM matrix.
+#
+# Static over the fit window (2026-05-14 to 2026-07-08). Komanda technically became
+# a CTE ~2 Jul, but the static approximation is close enough at endpoint scoring.
+#
+# In forecast/scenario runs any zone in lab_rollout.yaml implies a CTE from its online
+# date. This file covers the historical fit window only.
+
+cte_zones:
+  - Bunia            # CTE Bunia (HGR) + CTE Elikya + CTE CME (straddles Bunia/Rwampara)
+  - Rwampara         # CTE Rwampara + CTE CME (shared)
+  - Nyankunde        # canonical spelling; a misspelling here matches no real zone and silently disables the CTE
+  - Mongbwalu        # CTE Mongbwalu (HGR, epicentre, co-located with RADIONE lab)
+  - Komanda          # CTE Komanda (SR44+; static approximation)
+  - Katwa            # NK Grand-Nord CTE (Butembo area); 138% occupancy signal
+  - Beni             # CTE Beni (ADF zone)
+  - Butembo          # CTE Butembo / CTE Kitatumba
+  - Miti Murhesa     # no hyphen — the hyphenated form matches no zone. CTE Lwiro (only SK treatment site)

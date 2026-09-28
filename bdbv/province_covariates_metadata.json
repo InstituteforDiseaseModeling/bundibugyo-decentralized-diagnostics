@@ -1,0 +1,10 @@
+{
+  "s_disruption": {
+    "source": "ACLED (Armed Conflict Location & Event Data)",
+    "source_url": "https://www.acleddata.com",
+    "accessed": "2026-08-05",
+    "spatial_unit": "province",
+    "temporal_window": "12 months ending 2026-07-25",
+    "transformation": "The weekly Africa aggregated export was filtered to DRC ADMIN1 rows and the EVENTS field was summed by province over the 12 months ending 2026-07-25. Those event counts were divided by WorldPop province population to obtain events per 100,000 people, then transformed into a normalized 0-1 accessibility score. Low values identify the high-disruption reference provinces; high values identify low-disruption provinces. Raw event counts and event rates are not distributed in this repository."
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "draw": 143,
+  "budget": 20,
+  "delay": 30,
+  "placement_file": "placement_d30.json",
+  "random_mask_key": "20_0",
+  "status_quo_zones": 226,
+  "random_zones": 223,
+  "celf_zones": 201
+}

@@ -1,0 +1,625 @@
+# Calibration configuration: priors, fixed assumptions, likelihood targets and sampler
+# settings for the spatial branching-process fit.
+#
+# BEHAVIOUR BRAKE. Transmission is damped on two timescales -- a fast LOCAL response to
+# visible deaths, under a slow NATIONAL response ramp:
+#
+#     r_eff = m_z * S_nat(t) * [R_floor + (R0 - R_floor) * B_loc]
+#
+# m_z is the per-zone multiplier, B_loc the sigmoidal local brake (see the `brake` keys
+# below), and S_nat(t) the national factor. `fixed.nat_brake_placement: global` puts S_nat
+# OUTSIDE the bracket, so it scales the whole local response rather than only its variable
+# part.
+#
+# The national ramp REPLACES an older deaths-driven gap-brake, switched off here via
+# `fixed.nat_half` / `nat_floor: 0.0`. model.py refuses a config carrying both forms, so
+# the two cannot be silently combined.
+#
+# WHICH BRAKE PARAMETERS ARE CALIBRATED. `brake_reforms` lists the brake-form parameters
+# that move from fixed to calibrated; names must be a subset of REFORM_PARAMS in the engine.
+#   hill_n   step softening   FIXED -- calibrating it cools the model and worsens the
+#                             peripheral-spill fit
+#   R_floor  local floor      OPEN
+#   tau_w    waning memory    FIXED -- worst long-horizon behaviour of the three
+#
+# R_floor is a LOCAL floor, not the late-time asymptote: the national factor keeps falling
+# after the local brake has bottomed out, so a supercritical R_floor is not a claim of
+# permanent supercriticality.
+#
+# 14 calibrated parameters in total; see CAL in the engine.
+brake_reforms: [R_floor]
+
+# --- FIT DESIGN NOTES --------------------------------------------------------------------
+#
+# NATIONAL FOOTPRINT (471 zones). Calibration runs on the full national mobility footprint
+# -- Flowminder zones, union the case list, union the seed zone -- not a reduced
+# outbreak-core subset. This is required, not merely tidier: the forward intervention
+# simulation must consume RNG identically to calibration, and `rng.choice(Z, ...)` consumes
+# different state for different Z. With a mismatched zone count the two diverge at the first
+# jump-dispersal event -- measured as 4,122 infections forward against 4,145 in calibration
+# at the same posterior draw. Calibration and forecast must share one zone set.
+#
+# THE NATIONAL CLOCK IS NOT FITTED. `fixed.nat_scale_t0` places the clock's onset at the
+# in-window horizon, which makes S_nat exactly invisible to the likelihood: infection frames
+# are bit-identical for every (nat_scale_T, nat_scale_min, nat_scale_n). Those three are
+# therefore CHOSEN on a forward criterion and swept post-hoc on the resulting posterior,
+# never estimated in-window. Each carries a single value here, so no fit can silently
+# claim to have distinguished a design the likelihood cannot see.
+#
+# OTHER LOCKED DECISIONS
+#   * seed date from a back-calculated median (2026-03-17, sd 14 d), with `seed_day_offset`
+#     calibrated as a continuous +/- 30 day shift
+#   * `f_refer` FIXED at 0.05
+#   * the spatial likelihood lumps the top-15 zones plus an "other" bucket (95.5% of
+#     observed cases); the within-core Dirichlet-multinomial and the peripheral
+#     Beta-Binomial split are kept as SEPARATE terms
+#   * admissions, recoveries and suspect-isolation series enter as overlays only, never
+#     scored
+#
+# KNOWN RESIDUALS -- carry these as caveats into any intervention result
+#   * Mongbwalu ~185% of observed: a seed-shift artefact; the short effective horizon
+#     concentrates cases too close to the origin
+#   * Rwampara ~50% of observed: a persistent under-fit, likely metro connectivity that the
+#     mobility data does not capture
+#   * cumulative confirmed ~112% of observed, likely tied to the Mongbwalu overshoot
+#
+seed: 20260720
+n_draws: 200
+n_workers: 176                 # emcee's red-blue split cannot finish a half-step until its
+                               # SLOWEST walker returns, and evaluation cost here is heavy-tailed
+                               # (reject-and-redraw costs M/q(theta) attempts), so a single chain
+                               # realises only ~25% CPU on a big box. Set this to the core count
+                               # you have; override with --workers.
+nb_dispersion: 2.0             # THE BURDEN BRAKE: the shared NB dispersion on the temporal cells
+                               # (conf_new, confirmed_iso, deaths). Too loose and nothing penalises
+                               # over-prediction -- at 0.2 the tolerance band is ~+-220% at mean 500,
+                               # and burden is effectively unconstrained. A value sweep over
+                               # {0.2, 0.5, 1, 2, 4, 8} moves peak latent from ~10,300 (unconstrained)
+                               # onto the ~7,200 epi anchor for anything in 0.5-2.0, with the brake
+                               # slope steepening -1.6 / -5.0 / -11.0 at 0.5 / 1.0 / 2.0. At >=4.0 it
+                               # over-constrains, dragging peak latent below the anchor. 2.0 is the
+                               # firm end of that safe range.
+zone_background: 0.5
+# split_background = 0.0 keeps the frac-other SPLIT symmetric: it scores the raw model
+# 'other' count against the raw obs 'other' count. A nonzero value here adds a per-zone
+# background to the MODEL side only -- the observed side never had one -- which at 471
+# zones injects hundreds of phantom peripheral cases and turns the share constraint into a
+# size reward. The unscored overlay DM figures still use `zone_background` unchanged.
+split_background: 0.0
+weekly_step_days: 7                 # superseded for deaths by the `death_likelihood` block; no longer read
+
+mobility_source: hdx
+# Province-level ACLED event rates were transformed to a normalized 0-1 accessibility score
+# before public export. s_z = 0 marks high-disruption reference provinces; s_z = 1 marks
+# low-disruption provinces with multiplier rho_access.
+zone_hetero_column: s_disruption
+horizon_date: "2026-08-02"          # end of the scored window. National cumulative confirmed = 3,200
+                                    # and cumulative deaths = 1,405 at this date. The series jumps
+                                    # 20 -> 22 -> 23 -> 25 Jul, and the 22-Jul harmonisation back-fill
+                                    # (~+369 cases baked into the cumulative) is left as-is -- inspect
+                                    # the conf_new residual at 22-Jul post-fit.
+response_start_date: "2026-05-06"
+
+aware_threshold: 10
+machine_catchment: served
+
+confirm_capacity:
+  # The terminal plateau is .inf, not a finite number. Observed throughput has been slack
+  # since 06-04 (peak ~85/day), and `_confirm_with_capacity` holds the cap array's LAST
+  # value indefinitely, so a finite plateau would silently reimpose a hard ceiling in any
+  # forecast or intervention run once demand exceeded it. Use .inf, NOT null/NaN -- a NaN
+  # cap silently zeroes capacity, because `cnt < NaN` is False. cap_phei (calibrated) and
+  # the 100/day step are genuine historical constraints.
+  dates: ["2026-01-01", "2026-05-10", "2026-05-28", "2026-06-04"]
+  caps:  [3,             null,          100,           .inf]
+backlog_targets:
+  dates:   []
+  values:  []
+backlog_overlay_dates:  ["2026-05-25", "2026-06-01"]
+backlog_overlay_values: [203, 47]
+
+epi_joint:
+  # A soft constraint on total epidemic SIZE, fitted to epiforecasts' published
+  # cumulative-infection intervals: an NB(mean, disp) least-squares fit to their 30/60/90%
+  # CIs (6,310-7,357 / 5,861-8,336 / 5,283-10,459).
+  enabled: true
+  # The anchor date sits at the scored horizon while the estimate is carried from the last
+  # epiforecasts release, which is dated a few days earlier. The model's latent at the
+  # horizon therefore exceeds the anchor by roughly that much growth. This is acceptable
+  # because the anchor is a soft burden constraint, not a hard target; refresh the estimate
+  # whenever epiforecasts re-runs.
+  date: "2026-08-02"
+  estimate: 8400
+  disp: 20.0
+
+death_likelihood:
+  # The national death rail. Two-weekly (14-day) NB cells are laid out BACKWARD
+  # from `lower_bound_start_date` so that date is exactly an edge and cells are
+  # exactly `bin_step_days` wide (the oldest cell, near-zero deaths, absorbs the
+  # remainder). Everything from `lower_bound_start_date` to the horizon is ONE
+  # terminal cell scored as a soft LOWER BOUND (penalised only when the model
+  # under-predicts). DM-deaths is no longer scored (kept for PPC figs only).
+  bin_step_days: 14
+  # THE TERMINAL CELL IS THE SAME WIDTH AS EVERY OTHER CELL, AND TWO-SIDED. The tempting
+  # alternative -- a WIDE terminal bin scored as a ONE-SIDED lower bound -- has a sound
+  # motivation and a fatal consequence.
+  #
+  # The motivation is about the DATA: recent deaths are a known under-count, and the series
+  # carries reporting artifacts (the 07-22 harmonisation booked ~+270 deaths in two days).
+  # A wide bin averages the artifacts out, and an under-counted target arguably should not
+  # penalise a model that exceeds it.
+  #
+  # The consequence is about the LIKELIHOOD: a one-sided bound on a bin holding ~72% of the
+  # whole death rail, in a cell nearly twice as wide as its neighbours, leaves the model
+  # free to run transmission arbitrarily hot to stay clear of the penalty -- and fits do
+  # sit exactly on that bound. The data argument comes out as a transmission ratchet.
+  #
+  # So the intent is kept but moved into the TOLERANCE rather than the shape: uniform
+  # 14-day bin, two-sided, with a deliberately LOOSE dispersion on the terminal cell
+  # (`terminal_disp` below).
+  lower_bound_start_date: "2026-07-19"   # = start of the TERMINAL cell (name kept for back-compat).
+                                       # Track this with the horizon so the terminal cell stays
+                                       # exactly `bin_step_days` wide.
+  # The terminal cell is NEUTRAL -- an ordinary two-sided NB cell, so recent deaths
+  # constrain burden from BOTH sides instead of only from below.
+  terminal_mode: two_sided
+  # Target at face value. The model's own detection layer already carries ascertainment, so
+  # the comparison is confirmed-deaths vs confirmed-deaths and no extra inflation is
+  # warranted here. Set < 1.0 to inflate the target for within-bin reporting lag, or > 1.0
+  # to net out the 07-22 harmonisation batch — either without a one-sided bound.
+  terminal_completeness: 1.0
+  # Uniform with the rest of the rail, and a SETTLED question -- do not re-open without new
+  # evidence. Two measurements stand behind it:
+  #   * Loosening the terminal cell relative to the rail (0.5 vs the global 2.0) barely moves
+  #     the fit (terminal cell 0.55x -> 0.59x, realized Rt 0.894 -> 0.892). A 4x looser cell
+  #     REMOVES the constraint rather than softening it, so a uniform rail costs ~nothing and
+  #     removes a free knob.
+  #   * A DEATH-SPECIFIC dispersion is deliberately NOT opened. Re-pricing the whole rail at
+  #     k in {2, 8, 20} gives terminal 0.59x / 0.64x / 0.72x and Rt 0.892 / 0.926 / 0.956 --
+  #     monotone but never arriving, short of both the observed value and the epiforecasts
+  #     1.07-1.20 band at EVERY k, while reweighting ESS collapses 93.5% -> 23.3% -> 2.0%.
+  #     The lever's ceiling is bounded and short of target, so fitting it would spend a
+  #     parameter on a known dead end.
+  #
+  # Note k = 2.0 is itself nearly toothless on death counts: NB variance at mu = 361 is
+  # mu + mu^2/k = 65,500, so a 379-count miss is 1.5 sigma. CONSEQUENCE: the death rail is a
+  # WEAK discriminator between brake forms, and evidence about the brake has to come from the
+  # Rt anchor and the case series instead.
+  terminal_disp: 2.0
+
+# --- effective-Rt anchor ---------------------------------------------------------------
+# epiforecasts publishes a LATEST reproduction number, and it is the only target we have
+# that constrains the BRAKED state directly. Every other cell constrains cumulative size;
+# none of them says "and it is currently declining at this rate". Since that decline is
+# exactly what `nat_half` controls, this is the target that can identify it.
+#
+# 2026-08-05 release (data as of 2026-08-02): latest R 30% 1.07-1.20, 60% 1.0-1.32,
+# 90% 0.85-1.57. Least-squares Normal fit to all three bands -> N(1.168, 0.211), which
+# reproduces them to ~0.02 and carries P(R < 1) = 0.21. Initial R for the same release is
+# 30% 1.69-2.09 -> N(2.018, 0.503); kept here for the figure overlay, NOT scored (R0 already
+# has its own prior, and scoring both ends would double-count).
+#
+# Estimator: the model side uses the renewal-equation Rt on daily LATENT incidence, the same
+# estimator as figures/07_rt.png, so the scored target and the plotted curve cannot disagree.
+# `window_days` averages the curve over 7 days and `lag_days` ends that window 5 days before
+# the horizon: the 7-day centred smooth biases the final ~3 days, so the very tip of the
+# curve is not a fair comparator to a published "latest R".
+#
+# Deliberately SOFT: one Normal cell against ~50 count cells. It should inform nat_half, not
+# overrule the case and death series. Set sd: 0 to disable.
+rt_target:
+  mean: 1.168
+  sd: 0.211
+  window_days: 7
+  lag_days: 5
+  epi_initial_band: [1.69, 2.09]     # figure overlay only (30% band)
+  epi_latest_band:  [1.07, 1.20]     # figure overlay only (30% band)
+
+contacts_per_index: 12.6
+backlog_positivity_scalar: 0.35
+
+scope:
+  n_frontier_neighbours: 15
+  # The lab road-catchment radius is NOT a scope constant -- see `fixed.catchment_minutes`.
+  # The engine raises if a `catchment_minutes` key appears here, so the radius can never be
+  # readable from two places at once.
+  always_include: [Bambu, Drodro, Fataki]
+
+seed_infection:
+  zone: Mongbwalu                      # canonical spelling. A misspelling here aliases to the
+                                       # right name in some paths but is inserted RAW into the
+                                       # zone set, creating a phantom 0-case, no-mobility seed
+                                       # zone.
+  n: 1
+  start_date_mean: "2026-03-16"       # epiforecasts central estimate; 60% band 03-09..03-23,
+                                      # age-to-cutoff 129 d in a 60% band of 122-136. The
+                                      # calibrated seed_day_offset [-30, 30] covers the 90%
+                                      # band 02-27..03-27.
+  start_date_sd_days: 14              # 30-day span
+
+confirmed_step_days: 3
+
+dm_top_n: 15
+
+emcee:
+  n_walkers: 480                 # More ensemble spread per step attacks the boom-bust mixing in R0, the slowest-mixing direction: at 240 walkers tau climbed ~linearly (3,609 at 60k steps), so the usual iter > 50*tau early-stop would need ~180k steps. Wants a many-core machine; 160 cores handles 480 comfortably.
+  n_steps: 60000                 # A FULL-BUDGET, NOT TAU-CONVERGED, CHAIN -- read the posterior
+                                 # accordingly. tau in the slowest direction runs to ~10^3-10^4
+                                 # here, so the iter > 50*tau early-stop criterion is not reachable
+                                 # inside any budget we can afford: a 200k-step run also failed to
+                                 # tau-converge, and the extra 140k steps moved frac-other by only
+                                 # ~0.04. 60k buys essentially the same answer at 30% of the cost.
+                                 # Resumes from emcee_chain.h5, so raising this loses no compute.
+  n_burn: 5000                   # ~10x tau; clamped to iterations//3 at finalize (early-stop safe).
+  chunk_steps: 1000              # run in 1k-step chunks -> checkpoint boundary for backups + early-stop check.
+  backup_keep: 2                 # 2 rotating backups, not 3: a long chain can fill the disk (a 247 G volume hit ENOSPC at iteration 27,953 with 3 kept).
+                                 # and the run died mid-write. At 60k this chain reaches ~9 G, so 3 rotating
+                                 # snapshots cost ~27 G plus ~9 G transient per rotation. 2 keeps real
+                                 # crash-repair depth (_open_backend falls back bak0 -> bak1) at 2/3 the cost.
+                                 # rotating .bak snapshots of emcee_chain.h5 for spot-reclaim repair.
+  conv_tau_mult: 50              # early-stop once iter > 50*max(tau) AND tau stable (<1% between chunks).
+  init_scale: 0.3
+  fixed_sim_seed: false          # seeds drawn fresh per eval (pseudo-marginal), not frozen
+  pseudo_marginal:               # M simulator seeds per theta; see the engine's _emcee_log_prob
+    enabled: true
+    n_particles: 10              # M is NOT the binding lever on acceptance (the proposal's dimension
+                                  # is); M=10 keeps L_hat variance controlled at ~40% less simulation
+                                  # cost than M=16.
+
+# --- calibrated priors. Parameters that showed near-zero prior->posterior width
+#     shrinkage were moved to `fixed:` below rather than carried as dead dimensions ---
+priors:
+  R0:                  {dist: normal,    mean: 1.9, sd: 0.5,  min: 1.2}   # centred on the epiforecasts initial-R central (~1.9, band 1.79-2.15); R0 IS the pre-brake initial R. sd 0.5 so the data can still pull.
+  jump_prob:           {dist: beta,      a: 2,  b: 12}
+  ascertainment:       {dist: beta,      a: 2,  b: 2}
+  ifr:                 {dist: beta,      a: 13.7, b: 14.3}   # anchored on the epiforecasts CFR bands (30% 0.46-0.51, 60% 0.44-0.55, 90% 0.38-0.60): a least-squares fit gives Beta(27.4,28.5) mean 0.49, widened ~2x here because it is another model's posterior. Mean 0.49, 5-95% 0.34-0.64. Locating this prior too LOW forces the model to manufacture the observed death total through BURDEN rather than death rate.
+  sq_trace_eff:        {dist: beta,      a: 5,  b: 2}
+  p_iso_presump:       {dist: beta,      a: 4,  b: 3}
+  cum_half:            {dist: uniform,   min: 2.0,  max: 200.0}   # kept calibrated: most real shrinkage (0.68) of the Hill triad
+  # NOTE ON R_floor: whether it is calibrated here or held in `fixed:` is a real choice, and
+  # the tension is that it is REDUNDANT WITH nat_half under the gap-brake form. Both control
+  # transmission in the braked state -- r_eff = R_floor + (R0 - R_floor)*B_local*B_nat -- so
+  # a free R_floor competes with nat_half for the same signal, and when R_floor is opened
+  # under a Beta(8,2) prior the posterior comes back as the prior (width ratio 1.07, median
+  # shift -0.03), i.e. unidentified. Under the `global` placement used here the two are no
+  # longer redundant and R_floor is calibrated; see `brake_reforms` at the top of this file.
+  #
+  # `p_iso_confirmed` is NOT sampled. `iso_uplift` is, and
+  # p_iso_confirmed = p_iso_presump + (1 - p_iso_presump) * iso_uplift, which NESTS the two
+  # tiers so the confirmed tier can never sit below the presumptive one. Beta(2,3): mean
+  # 0.40, wide -- deliberately generous, so the reparameterisation cannot be read as a quiet
+  # tightening of the confirmation channel.
+  iso_uplift:          {dist: beta,      a: 2,  b: 3}
+  collect_ratio:       {dist: uniform,   min: 0.10, max: 0.80}
+  short_trips_alpha:   {dist: uniform,   min: 0.0,  max: 1.0}
+  cadaver_swab_coverage: {dist: beta,    a: 1,  b: 4}
+  seed_day_offset:     {dist: uniform,   min: -30.0, max: 30.0}
+  # --- the two brakes ---
+  # nat_half = national deaths (ifr·cum, same units as cum_half) at which the NATIONAL
+  # awareness brake halves R.
+  #
+  # SCALE, measured rather than guessed. The driver is
+  # NOT ifr·latent: it counts only POST-RECOGNITION infections and lags the horizon by
+  # brake_lag = recovery_mean = 16 d, which together keep just ~64% of latent. So at the
+  # 25-Jul horizon:
+  #     at a high-ifr, high-latent draw (ifr 0.577, latent ~12k):      D_nat ≈ 4478
+  #     at the 7233 epiforecasts anchor with ifr 0.49:                 D_nat ≈ 2282
+  #     at the 7233 anchor with the observed CFR 0.44:                 D_nat ≈ 2049
+  # The anchor-consistent figure is the one to design against: ~2100-2300. (Deriving the
+  # range from ifr·latent ≈ 5300 instead is high on both the ifr and the burden, and
+  # centres the grid too weak.)
+  #
+  # Implied brake strength at the horizon, B_nat = 1/(1+(D/nat_half)^2) at D = 2282:
+  #     nat_half  4563 -> B_nat 0.80   (barely engaged)
+  #     nat_half  2282 -> B_nat 0.50
+  #     nat_half  1141 -> B_nat 0.20   (strongly engaged)
+  # Heightened awareness is a claim about NOW, so the prior is centred on "already
+  # engaged": loguniform(150, 5000) has median 866 (B_nat ≈ 0.13) and still reaches 5000
+  # (B_nat ≈ 0.83, effectively off) so the data can turn it off.
+  #
+  # With nat_hill_n = 2 and R_floor ≈ 0.8, national transmission crosses R_eff = 1 near
+  # D ≈ 3·nat_half, so nat_half sets the forward final size directly — it IS the missing
+  # forward operator, not a nuisance parameter. loguniform because it is a half-saturation
+  # constant spanning decades; a uniform prior would put nearly all mass on "barely bites".
+  nat_half:            {dist: loguniform, min: 150.0, max: 5000.0}
+  # rho_access = R multiplier for a zone in the least-constrained class (well-served, low
+  # operating disruption) relative to the Ituri reference class. See
+  # bdbv/province_covariates.csv for the transformed province-level covariate and
+  # `zone_hetero_column` for which one.
+  #
+  # CHOOSE THIS PRIOR ON THE INTERPRETABLE SCALE. What we actually have a belief about is
+  # not rho but R in a typical non-reference DRC zone. With s = 0.87 for the modal zone,
+  # m = 1 - (1 - rho)*0.87, and at representative medians R0 = 2.72 / R_floor = 0.81:
+  #     rho 0.20 -> m 0.30 -> R_out 0.83   SUBcritical (spread into DRC dies out)
+  #     rho 0.28 -> m 0.37 -> R_out 1.02   the critical point
+  #     rho 0.40 -> m 0.48 -> R_out 1.30
+  #     rho 0.67 -> m 0.71 -> R_out 1.94
+  #     rho 1.00 -> m 1.00 -> R_out 2.72   no heterogeneity
+  #
+  # Beta(6,3) (mean 0.67) would give P(R_out < 1) = 0.01 — it STRUCTURALLY FORBIDS the
+  # rest of DRC being subcritical, so the covariate could only ever slow country-wide
+  # spread, never stop it. That is not a belief we hold; a 10x difference
+  # in operating disruption plausibly does put much of DRC below threshold.
+  # Beta(2,3): mean 0.40, 5-95% [0.10, 0.75], median R_out 1.27, P(R_out < 1) = 0.30.
+  # Spans "most of DRC cannot sustain transmission" through "transmits like Ituri", with
+  # mass on both sides of the critical point so the data and the forward question can both
+  # speak. Reaches 0.75 (R_out 2.1), so a no-heterogeneity rho = 1 is not excluded.
+  rho_access:          {dist: beta,      a: 2,  b: 3}
+  # --- nat_floor = beta, the FLOOR on the national awareness brake ---
+  # B_nat' = beta + (1 - beta) * B_nat. Interpretation: the share of frontier transmission
+  # that national awareness cannot reach — chains driven by people who have not encountered
+  # the response. beta = 0 turns the floor off exactly.
+  #
+  # CHOOSE THIS PRIOR ON THE INTERPRETABLE SCALE (same discipline as rho_access above). The
+  # belief we actually hold is about r_eff in a FRESHLY INVADED zone — one with no local
+  # awareness of its own, so B_local = 1 and only the national factor brakes it. At
+  # representative medians (R0 = 2.752, R_floor = 0.80) and a horizon B_nat = 0.43:
+  #     beta 0.00 -> B_nat' 0.43 -> r_eff(fresh) 1.64   no floor (the full 40% haircut)
+  #     beta 0.10 -> B_nat' 0.49 -> r_eff(fresh) 1.75
+  #     beta 0.20 -> B_nat' 0.54 -> r_eff(fresh) 1.86
+  #     beta 0.30 -> B_nat' 0.60 -> r_eff(fresh) 1.97
+  #     beta 0.50 -> B_nat' 0.72 -> r_eff(fresh) 2.20
+  #     beta 1.00 -> B_nat' 1.00 -> r_eff(fresh) 2.75   national brake fully off
+  # These are PER-ZONE fresh-zone values, not realized aggregate Rt — the aggregate is a
+  # composition statistic (a mixture weight on how much transmission is on the frontier), and
+  # it co-moves with beta because weakening the brake invades more zones, each entering fresh.
+  # Do not re-derive a frozen-composition bound from this table.
+  #
+  # Beta(2,5): mean 0.286, median 0.264, 5-95% [0.063, 0.582]. Puts mass on "national awareness
+  # reaches most but not all frontier transmission" while keeping the no-op reachable
+  # (P(beta < 0.05) = 0.03) WITHOUT a prior spike there — beta = 0 must be able to win on
+  # evidence, not by default. The upper tail stops well short of 1: a national response that
+  # touches NOTHING on the frontier is not a belief we hold, and letting beta -> 1 would make
+  # nat_half unidentifiable (with the brake floored near 1 its half-point stops mattering).
+  nat_floor:           {dist: beta,      a: 2,  b: 5}
+
+  # ======================================================================================
+  # THE THREE BRAKE-FORM REFORMS.
+  #
+  # Their PRIORS live here unconditionally; whether each reform is actually CALIBRATED is set
+  # by the top-level `brake_reforms:` list, overridable by the BRAKE_REFORMS env var. A reform
+  # that is not in that list runs at its `fixed:` no-op value below.
+  #
+  # The prior and the on/off switch are deliberately separated. Commenting a spec out to close a
+  # reform would lose the prior, and these priors are the argued part of the model.
+  # ======================================================================================
+
+  # --- Reform A: step softening. Frees the Hill exponent, otherwise fixed at 8.7. -------
+  # The argument is about AGGREGATION, not individual psychology. Even if every person flips
+  # behaviour at a hard threshold, the ZONE-level response is the CDF of the threshold
+  # distribution across that zone's population, so hill_n measures dispersion of thresholds
+  # rather than anyone's sharpness. n = 8.7 asserts everyone in a health zone flips within
+  # +-13% of the same cumulative death count. Real heterogeneity gives n ~ 1-2.
+  #
+  # LogNormal(log 2, 0.75): median 2, 5-95% [0.58, 6.9]. Reaches n = 1 (the classic saturating
+  # response) and keeps P(n > 8.7) = 0.02 — the current value stays REACHABLE but not favoured,
+  # so the data must be able to say "no, it really is sharp".
+  #
+  # This may partly pay for its own dimension: cum_half and hill_n are the location and shape of
+  # one curve, and with the shape frozen the location is over-determined.
+  hill_n:              {dist: lognormal, meanlog: 0.6931, sdlog: 0.75}
+
+  # --- Reform B: unpin the cold asymptote. Re-opens R_floor above 1. --------------------
+  # Once B_loc ~ 0 the product collapses and r_eff -> R_floor REGARDLESS of nat_half, nat_floor
+  # or rho_access — they enter only multiplicatively. R_floor is therefore the sole controller of
+  # the late-time core asymptote, and it is pinned at 0.80.
+  #
+  # Opening it under a Beta(8,2) prior, whose support is (0,1), measures it as unidentified
+  # (width ratio 1.07) — but that prior forbids the only region that would have mattered, so
+  # "a fully-braked zone is subcritical" comes out as a PRIOR CONSTRAINT, not a result. The
+  # prior below permits R_floor >= 1 so that conclusion has to be earned.
+  #
+  # Interpretation: residual transmission behaviour change CANNOT remove — nosocomial, unsafe
+  # burial that persists, care-seeking that never happens. Across 471 health zones in a conflict
+  # setting, asserting that is always subcritical is a claim we have not earned.
+  #
+  # LogNormal(log 1.05, 0.30): median 1.05, 5-95% [0.64, 1.72], P(R_floor >= 1) = 0.56. The
+  # centring follows from the PLACEMENT, not from a wish for more transmission. Under `gap`
+  # this parameter IS the late-time
+  # asymptote, so R_floor >= 1 asserted permanent supercriticality and a prior mostly below 1 was
+  # right. Under `global` the asymptote is S_min*R_floor and the parameter is only the floor of
+  # the LOCAL behavioural response — whose job, per the health-zone Rt panel (no sustained
+  # sub-critical episode in any large zone, turning points scattered over 1-106 cumulative
+  # confirmed deaths), is to take R0 down to about 1, not below it.
+  R_floor:             {dist: lognormal, meanlog: 0.04879, sdlog: 0.30}
+
+  # --- Reform C: waning memory. Frees the driver's decay time constant. -----------------
+  # THE LOAD-BEARING REFORM. A and B move the endpoints of a two-point mixture; C changes what
+  # the brake responds to. With a cumulative driver the brake is a RATCHET (commitment P1) and
+  # timing-blind (P2): 500 deaths over 3 weeks == 500 deaths over 6 months, forever. With a
+  # decaying driver, risk salience has half-life ln2*tau_w, so an established zone comes OFF the
+  # floor when its deaths stop — which is the only mechanism here that can warm the CORE rather
+  # than shifting weight onto the frontier, i.e. the only one that can buy warmth without paying
+  # in frac-other. Standard prevalence-driven behaviour form (Funk; Perra; Eksin/Weitz).
+  #
+  # ONE shared tau_w for local and national, not two — the sampler is at 0.0019 acceptance and
+  # cannot afford vanity dimensions.
+  #
+  # LogNormal(log 45, 0.9): median 45 d (half-life 31 d), 5-95% [10.2, 197] d. Spans "memory
+  # resets within a month" to "effectively permanent over this 213-day horizon" — at tau_w = 197
+  # the driver is within ~30% of cumulative across the whole window, so the CURRENT FORM IS THE
+  # UPPER TAIL of this prior and can win on evidence. Lower bound of usefulness is ~10 d (below
+  # the 16 d visibility lag the brake would chase noise); model.py refuses tau_w < 1 d outright
+  # for a float64-overflow reason documented at Params.__post_init__.
+  #
+  # UNITS TRAP (README): D_w is a rate x time, not a count — at steady infection rate lambda it
+  # converges to ifr*lambda*tau_w. cum_half and nat_half priors are re-derived on MEASURED units
+  # before any fit, or both half-constants are silently re-centred.
+  tau_w:               {dist: lognormal, meanlog: 3.8067, sdlog: 0.90}
+
+# --- FIXED assumptions ---
+fixed:
+  # No-op values for the three brake-form reform parameters, used whenever a reform is
+  # CLOSED (its name absent from `brake_reforms:` above, or excluded by BRAKE_REFORMS).
+  tau_w: .inf                   # cumulative driver; reform C's no-op.
+  # The parameters below are held FIXED rather than calibrated. Each showed near-zero
+  # prior->posterior width shrinkage when it was opened (ratio >= 0.84, against 0.5-0.68 for
+  # the parameters that are kept) and low correlation with the identified, policy-relevant
+  # ones. Values are anchored on the posterior median from those runs unless noted.
+  k: 0.372                      # width ratio 1.08 -- the posterior came back WIDER than the
+                                 #   prior -- and unstable across methods (0.536 vs 0.372).
+                                 #   Overdispersion is genuinely hard to pin down from aggregate
+                                 #   case counts; it mostly looks like noise. Correlated with R0
+                                 #   (r = +0.35), so re-check R0's posterior if this changes.
+  hill_n: 8.7                   # width ratio 0.85; uncorrelated with cum_half/R_floor
+                                 #   (|r| <= 0.06 on both Pearson and Spearman -- no Hill-triad
+                                 #   ridge); mild coupling to p_iso_confirmed (r = +0.22).
+  p_clin: 0.333                 # width ratio 0.95 (flat). Confirmation requires got_pcr
+                                 #   regardless of clin, so clinical presentation only affects
+                                 #   presumptive-isolation timing -- a second-order lever against
+                                 #   the PCR-gated conf_new likelihood that dominates scoring.
+  cap_phei: 41.7                # width ratio 0.84. A historical one-off capacity window, not
+                                 #   part of the forward-looking diagnostic-placement question;
+                                 #   the median is stable across fits (39.1 -> 41.7).
+  noso_boost: 0.0                # width ratio 1.02 -- no shrinkage at all. Dropped to 0 rather
+                                 #   than to its median: f_refer = 0.05 means at most 5% of
+                                 #   non-CTE cases are referred, so the R-excess this gates is
+                                 #   diluted to irrelevance by construction.
+  gi_mean: 15.3
+  gi_sd: 9.3
+  incub_mean: 6.3
+  incub_sd: 3.5
+  # Lab road-catchment radius, in OSRM minutes: how far a sample may travel by road and
+  # still get the fast local turnaround. 0 = host zone only, no inter-zone sample
+  # transport. This one number sets `served` (8 zones), which sets BOTH the status-quo
+  # turnaround tier AND `~served_mask`, the placement-eligible set (462 zones). There is
+  # no default -- the engine raises rather than fall back to some other radius.
+  catchment_minutes: 0
+  local_turnaround: 1.0
+  report_delay_mean: 4.0        # legacy onset-to-report draw; retained for RNG parity
+  ramp_a: 1.0
+  w_burial: 0.37
+  burial_width: 0.8
+  recovery_mean: 16.0
+  recovery_sd: 6.0
+  clin_beta_a: 2.0
+  clin_beta_b: 1.0
+  collect_delay_machine: 2.0
+  collect_delay_nomachine: 4.0
+  sq_trace_lag: 2.0
+  # --- contact-LISTING throughput cap. MEASURED, NOT CALIBRATED ---
+  # The SitReps (data/tracing_series.csv, 36 reports where listing is stated) show new
+  # contacts listed per day = 435 +/- 186, UNCORRELATED with same-day confirmed cases
+  # (listed = 371 + 1.5*cases, r = 0.13). So the system lists roughly the same number of
+  # contacts whether 21 or 125 cases are confirmed, and contacts-per-case collapses as
+  # incidence rises (median 13.3 on <=40-case days vs 8.6 on >40; corr(log cases,
+  # log contacts-per-case) = -0.60). Converting to the model's units, where one "contact"
+  # slot is spent per confirmed case at the UNCONGESTED breadth of 13.3:
+  #     435 contacts/day / 13.3 per case = 32.7 cases/day = 458 per 14 d  ->  460
+  # Bracket (dominated by the contacts-per-case denominator, not by the 435): 20/case ->
+  # 305, 10/case -> 610.
+  #
+  # WHY FIXED AND NOT CALIBRATED: it is not orthogonal to sq_trace_eff (both set how much
+  # tracing happens), so fitting both would produce a ridge rather than two estimates.
+  # Pinning it on the listing observable takes it out of the inference and makes the
+  # late-period Rt a PREDICTION of the mechanism rather than something a free parameter was
+  # tuned to. inf = no cap. Set 460.0 to engage the measured cap.
+  trace_cap: .inf
+  # Window over which listing load accrues. FIXED, not fitted: nothing is trending down yet,
+  # so 10 d and 21 d windows are both monotone rising over the whole fitting period and the
+  # data cannot separate them. 14 d is the active follow-up cohort (contacts are followed
+  # 21 d from exposure).
+  trace_window: 14.0
+  # Which caseload dilutes the listing queue. `observed` (the trailing
+  # trace_window count of OBSERVED national confirmations) is the only driver that can express
+  # the mechanism. The model's own confirmations rise 1.37x from mid-June to the horizon and
+  # FALL over the last fortnight, against 2.83x observed, so an endogenous driver's coverage
+  # multiplier turns back UP precisely where the observed collapse happens (see
+  # outputs/stage_a_load_fidelity.csv). `model` restores the endogenous load for comparison.
+  # This puts C1 in the same class as the model's other exogenous response schedules —
+  # served_from_day, collect_high_from_day, confirm_capacity — not in the class of fitted brakes.
+  # Seed conditioning. `nonzero` = exact zero-truncation of the index case's NB draw by
+  # inverse-CDF sampling, u ~ U(F(0), 1) with F(0) = (k/(k+R0))^k -- done per-draw, so it
+  # tracks both R0 and k rather than using a constant floor. At representative medians
+  # F(0) = 0.456.
+  #
+  # It buys a large reduction in wasted simulation: fizzle 48.8% -> 17.9%, sd(log L-hat)
+  # 9,327 -> 130, tail factor 231x -> 7.7x, with the surviving ensemble unchanged (+1.3%,
+  # inside its own noise). It is NOT bias-free: it divides the target by
+  # P(Z >= 1) = 1 - (k/(k+R0))^k, which tilts the fit slightly COOLER
+  # (~+-0.1 log-units across the posterior IQR). `null` restores the
+  # unconditioned draw bit-identically.
+  seed_u_min: nonzero
+  # ENDOGENOUS: tracing capacity is fundamentally a feedback process, and the value of this
+  # model is in forecasting, where an exogenous signal has to be invented anyway. The
+  # alternative, `observed`, is only needed when the model's own load is short or the wrong
+  # SHAPE -- the endogenous coverage multiplier turns back UP over the final
+  # fortnight, exactly where the observed one collapses. Keeping `observed` bakes the
+  # terminal multiplier into every forecast, so a cooling epidemic could never recover
+  # tracing capacity. Inert while trace_cap is infinite; load-bearing the moment it is set.
+  listing_load_source: model
+  cap_multiplier: 1.0
+  gravity_d0_km: 5.0
+  cadaver_swab_sens: 0.90
+  cadaver_swab_delay_days: 5.0
+  cadaver_swab_scope_all: true
+  unserved_turnaround_early: 8.0
+  unserved_turnaround_late:  5.0
+  unserved_switch_date: "2026-05-30"
+  suspect_positivity: 0.69
+  bed_stay_post_confirm_days: 12
+  bed_stay_suspect_days: 6
+  gravity_beta: 2.0
+  R_floor: 0.80                  # only read when R_floor is NOT in `brake_reforms:` above.
+                                 # 0.80 = the Beta(8,2) prior mean, and about where an
+                                 # unidentified posterior (width ratio 1.07) left it.
+  # --- national awareness brake shape (only nat_half is calibrated) ---
+  nat_hill_n: 2.0                # gentler than the local hill_n (8.7). National awareness
+                                 # accumulates gradually; a step would be indefensible and
+                                 # would also make nat_half near-unidentifiable.
+  nat_brake_driver: deaths       # "deaths" = endogenous (national visible-death toll drives
+                                 # awareness — self-limiting, and the honest mechanism for
+                                 # "neighbouring zones know what is happening").
+                                 # "calendar" = exogenous sensitivity variant, uses nat_half_days.
+  nat_half_days: 0.0             # only read when nat_brake_driver == "calendar"
+  # --- the national factor's PLACEMENT and the slow clock ------------------------------------
+  # `global` puts it outside the bracket: r_eff = m_z * S_nat(t) * [F + (R0-F)*B_loc], so it
+  # scales the braked core and the naive frontier alike. `gap` is the older form.
+  nat_brake_placement: global
+  # The gap-brake is REPLACED, not supplemented. model.py's __post_init__ raises if these are
+  # non-zero under `global`, so the two national mechanisms cannot be layered by accident.
+  nat_half: 0.0
+  nat_floor: 0.0
+  # S_nat = S_min + (1 - S_min) / (1 + (max(t - lag - t_resp - t0, 0) / T)^n).
+  # The clamp is load-bearing: with an even exponent and no clamp the factor would sit BELOW 1
+  # on both sides of onset, i.e. a national response acting before it started. Clamped, this
+  # Hill is a sigmoid with all four properties we want, exactly — S_nat(t <= t_resp + t0) = 1,
+  # 50% point at t_resp + t0 + T, floor S_min, and slope at the centre n*(1-S_min)/(4T) per day.
+  # (n = 2 puts the inflection at 0.577*T, so the response is flat at first and steepens.)
+  #
+  # --- THE CLOCK'S ONSET SITS AT THE DATA HORIZON ---------------------------------------------
+  # t0 = 88 d past response_start (2026-05-06) = 2026-08-02 = horizon_date. `nat_scale` is read
+  # at thr = t_infect - brake_lag_days (16 d) and the generation engine keeps only offspring with
+  # t_infect <= 88, so every t0 >= 72 gives S_nat == 1 EXACTLY at every r_eff the fit evaluates.
+  # 88 takes the full 16 d of margin and puts onset on a date rather than on an offset chosen to
+  # just clear the bound.
+  #
+  # CONSEQUENCE: T and S_min below are INERT in the fit -- the infection frame is
+  # bit-identical for every (T, S_min, n). The national clock is therefore CHOSEN POST-HOC on
+  # the fitted posterior, against a +540 d West Africa anchor the likelihood never sees. Say
+  # "chosen", never "fitted".
+  #
+  # t0 is FIXED at 88 and is NOT swept: tuning onset until the forward operator looks safe
+  # would be fitting the forward answer. Any post-hoc sweep is over (T, S_min, n) only.
+  nat_scale_t0: 88.0
+  nat_scale_n: 2.0
+  nat_scale_T: 270.0             # INERT in the fit; post-hoc sweep axis
+  nat_scale_min: 0.25            # INERT in the fit; post-hoc sweep axis
+  dm_alpha_cases: 30.0           # concentration for the within-core Dirichlet-multinomial.
+  dm_alpha_deaths: 10.0
+  # Core-vs-periphery Beta-Binomial concentration. Scores the observed "other" count
+  # (148 / 2456 = 0.060) against the model's "other" share. `s` ALONE sets the tolerance --
+  # there is deliberately no separate component weight, so it is not double-counted. At
+  # s = 300 a 2x overshoot (0.12) costs ~6.3 log-units and a 33% overshoot (0.08) costs ~0.7.
+  #
+  # CHOOSING s IS A REAL TRADE-OFF IN BOTH DIRECTIONS. Too tight (s >~ 1000) and the cell
+  # starts REWARDING burden: the cheapest way to lower the 'other' SHARE is to raise the
+  # core denominator. Too loose (s ~ 100, matching the within-core DM's alpha = 30) and the
+  # periphery pin goes slack, letting peripheral spill run to several times observed.
+  # In between, around s ~ 200-300, the split and the nb_dispersion burden brake pull
+  # TOGETHER rather than against each other: tightening the split drops frac-other
+  # 0.149 -> 0.116 AND cools cumulative confirmed toward the observed total at the same time.
+  # 250 puts split pressure near its maximum BEFORE the burden-reward regime.
+  betabin_s: 250.0
+  # f_refer LOCKED at 0.05 -- a small phenomenological effect.
+  f_refer: 0.05

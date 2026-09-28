@@ -1,0 +1,46 @@
+name: figures
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Pinned: ruff's default rule set changes between releases.
+      - name: Lint and format check
+        run: |
+          uvx ruff@0.16.9 check .
+          uvx ruff@0.16.9 format --check .
+
+      - name: Check that everything compiles
+        run: uv run --frozen python -m compileall -q bdbv calibration scenarios scripts
+
+      - name: Run the unit tests
+        run: uv run --frozen python -m unittest discover -s tests
+
+      # Reads only the tracked exports in data/figure_inputs/, so this does not
+      # need the ~800 MB of external data that scripts/stage_data.py fetches.
+      - name: Rebuild the manuscript figures
+        run: uv run --frozen python scripts/make_figures.py
+
+      - name: Check that all eight figures were written
+        run: |
+          count=$(ls figures/*.png | wc -l)
+          echo "figures produced: $count"
+          test "$count" -eq 8
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: figures
+          path: figures/*.png
